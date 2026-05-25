@@ -4,6 +4,10 @@
 
 ![Serenity dashboard screenshot](docs/assets/serenity-dashboard.png)
 
+## 直接体验
+
+如果你不想自己搭建本地环境，可以订阅 [@iamai_omni](https://x.com/iamai_omni/creator-subscriptions/subscribe)，然后访问 [app.k2ai.dev](https://app.k2ai.dev) 直接使用托管版。
+
 > 本项目仅用于研究和可视化，不构成投资建议。
 
 ## 快速开始
@@ -73,6 +77,10 @@ python3 scripts/ingest.py stats
 This project reads X GraphQL curl commands from `x_curl/`, parses posts, replies, and premium posts from `@aleabitoreddit`, extracts `$SYMBOL` mentions, stores them in a local SQLite database, and downloads daily price bars from Yahoo's chart API.
 
 ![Serenity dashboard screenshot](docs/assets/serenity-dashboard.png)
+
+## Try It Directly
+
+If you do not want to set up the local project yourself, subscribe to [@iamai_omni](https://x.com/iamai_omni/creator-subscriptions/subscribe), then visit [app.k2ai.dev](https://app.k2ai.dev) to use the hosted version directly.
 
 > This project is for research and visualization only. It is not financial advice.
 
