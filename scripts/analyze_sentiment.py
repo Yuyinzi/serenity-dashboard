@@ -39,7 +39,7 @@ def load_config(args):
     env_path = ROOT / ".env"
     if env_path.exists():
         from dotenv import load_dotenv
-        load_dotenv(env_path)
+        load_dotenv(env_path, override=True)
     return {
         "api_key": args.openai_api_key or os.getenv("OPENAI_API_KEY"),
         "base_url": args.openai_base_url or os.getenv("OPENAI_BASE_URL"),
@@ -149,8 +149,15 @@ def save_analysis(con, mention_id, payload, model, raw_json):
     )
 
 
+def _client(config):
+    kwargs = {"api_key": config["api_key"]}
+    if config["base_url"]:
+        kwargs["base_url"] = config["base_url"]
+    return OpenAI(**kwargs)
+
+
 def analyze_direct(con, rows, config):
-    client = OpenAI(api_key=config["api_key"], base_url=config["base_url"])
+    client = _client(config)
     model = config["model"]
     for row in rows:
         request = build_analysis_input(row)
@@ -184,12 +191,17 @@ def write_batch_jsonl(rows, path, model=DEFAULT_MODEL):
 
 
 def create_batch(rows, output_path, config):
-    client = OpenAI(api_key=config["api_key"], base_url=config["base_url"])
+    if not rows:
+        raise SystemExit("no pending mentions to batch")
+    client = _client(config)
     model = config["model"]
     jsonl_path = write_batch_jsonl(rows, output_path, model)
-    uploaded = client.files.create(file=jsonl_path.open("rb"), purpose="batch")
-    batch = client.batches.create(input_file_id=uploaded.id, endpoint="/v1/responses", completion_window="24h")
-    print(json.dumps({"batch_id": batch.id, "input_file_id": uploaded.id, "jsonl": str(jsonl_path)}, indent=2))
+    try:
+        uploaded = client.files.create(file=jsonl_path.open("rb"), purpose="batch")
+        batch = client.batches.create(input_file_id=uploaded.id, endpoint="/v1/responses", completion_window="24h")
+        print(json.dumps({"batch_id": batch.id, "input_file_id": uploaded.id, "jsonl": str(jsonl_path)}, indent=2))
+    except Exception as exc:
+        raise SystemExit(f"OpenAI batch-create failed: {exc}") from exc
 
 
 def import_batch_results(con, result_path, model=DEFAULT_MODEL):
