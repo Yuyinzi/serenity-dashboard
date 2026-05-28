@@ -212,7 +212,10 @@ def create_batch(con, rows, output_path, config):
 
 
 def import_batch_results(con, result_path, model=DEFAULT_MODEL):
-    with Path(result_path).open("r", encoding="utf-8") as fh:
+    path = Path(result_path)
+    if not path.exists():
+        raise SystemExit(f"batch results file not found: {path}\nDownload it from the OpenAI dashboard (Batches page).")
+    with path.open("r", encoding="utf-8") as fh:
         for line in fh:
             item = json.loads(line)
             mention_id = int(item["custom_id"].split(":", 1)[1])
