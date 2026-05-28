@@ -16,8 +16,22 @@ SENTIMENTS = {"positive", "negative", "neutral", "mixed"}
 
 
 def connect():
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     con = sqlite3.connect(DB_PATH)
     con.row_factory = sqlite3.Row
+    con.execute(
+        """create table if not exists mention_analysis (
+            mention_id integer primary key references mentions(id) on delete cascade,
+            sentiment text not null check(sentiment in ('positive', 'negative', 'neutral', 'mixed')),
+            score real not null,
+            confidence real not null,
+            rationale text not null,
+            model text not null,
+            prompt_version text not null,
+            analyzed_at text not null,
+            raw_json text not null
+        )"""
+    )
     return con
 
 
