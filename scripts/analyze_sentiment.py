@@ -71,49 +71,41 @@ def pending_mentions(con, limit=200, symbol=None, force=False):
     ).fetchall()
 
 
-def response_schema():
-    return {
-        "type": "json_schema",
-        "name": "mention_sentiment",
-        "strict": True,
-        "schema": {
-            "type": "object",
-            "additionalProperties": False,
-            "properties": {
-                "sentiment": {"type": "string", "enum": ["positive", "negative", "neutral", "mixed"]},
-                "score": {"type": "number"},
-                "confidence": {"type": "number"},
-                "rationale": {"type": "string"},
-            },
-            "required": ["sentiment", "score", "confidence", "rationale"],
+ANALYSIS_SYSTEM_PROMPT = (
+    "You classify the author's stance toward one stock symbol in one X post. "
+    "Return sentiment positive, negative, neutral, or mixed. "
+    "Use positive for constructive/bullish views, negative for bearish/concerned views, "
+    "neutral for factual mentions, and mixed for both positive and negative signals. "
+    "Score is -1.0 to 1.0, confidence is 0.0 to 1.0. "
+    "This is research metadata, not financial advice. "
+    "Respond with a JSON object containing keys: sentiment, score, confidence, rationale."
+)
+
+SENTIMENT_JSON_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "sentiment": {"type": "string", "enum": ["positive", "negative", "neutral", "mixed"]},
+        "score": {"type": "number"},
+        "confidence": {"type": "number"},
+        "rationale": {"type": "string"},
+    },
+    "required": ["sentiment", "score", "confidence", "rationale"],
+}
+
+
+def build_messages(row):
+    return [
+        {"role": "system", "content": ANALYSIS_SYSTEM_PROMPT},
+        {
+            "role": "user",
+            "content": (
+                f"Symbol: {row['symbol']}\n"
+                f"Mention time: {row['mentioned_at']}\n"
+                f"Post text:\n{row['text']}"
+            ),
         },
-    }
-
-
-def build_analysis_input(row):
-    return {
-        "input": [
-            {
-                "role": "system",
-                "content": (
-                    "You classify the author's stance toward one stock symbol in one X post. "
-                    "Return sentiment positive, negative, neutral, or mixed. "
-                    "Use positive for constructive/bullish views, negative for bearish/concerned views, "
-                    "neutral for factual mentions, and mixed for both positive and negative signals. "
-                    "Score is -1.0 to 1.0, confidence is 0.0 to 1.0. "
-                    "This is research metadata, not financial advice."
-                ),
-            },
-            {
-                "role": "user",
-                "content": (
-                    f"Symbol: {row['symbol']}\n"
-                    f"Mention time: {row['mentioned_at']}\n"
-                    f"Post text:\n{row['text']}"
-                ),
-            },
-        ]
-    }
+    ]
 
 
 def validate_analysis(payload):
@@ -161,13 +153,20 @@ def analyze_direct(con, rows, config):
     client = _client(config)
     model = config["model"]
     for row in rows:
-        request = build_analysis_input(row)
-        response = client.responses.create(
+        messages = build_messages(row)
+        response = client.chat.completions.create(
             model=model,
-            input=request["input"],
-            text={"format": response_schema()},
+            messages=messages,
+            response_format={
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "mention_sentiment",
+                    "strict": True,
+                    "schema": SENTIMENT_JSON_SCHEMA,
+                },
+            },
         )
-        payload = validate_analysis(json.loads(response.output_text))
+        payload = validate_analysis(json.loads(response.choices[0].message.content))
         save_analysis(con, row["mention_id"], payload, model, response.model_dump_json())
         con.commit()
         print(f"analyzed mention_id={row['mention_id']} symbol={row['symbol']} sentiment={payload['sentiment']}")
@@ -177,15 +176,21 @@ def write_batch_jsonl(rows, path, model=DEFAULT_MODEL):
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8") as fh:
         for row in rows:
-            request = build_analysis_input(row)
             fh.write(json.dumps({
                 "custom_id": f"mention:{row['mention_id']}",
                 "method": "POST",
-                "url": "/v1/responses",
+                "url": "/v1/chat/completions",
                 "body": {
                     "model": model,
-                    "input": request["input"],
-                    "text": {"format": response_schema()},
+                    "messages": build_messages(row),
+                    "response_format": {
+                        "type": "json_schema",
+                        "json_schema": {
+                            "name": "mention_sentiment",
+                            "strict": True,
+                            "schema": SENTIMENT_JSON_SCHEMA,
+                        },
+                    },
                 },
             }, ensure_ascii=False) + "\n")
     return path
@@ -199,7 +204,7 @@ def create_batch(con, rows, output_path, config):
     jsonl_path = write_batch_jsonl(rows, output_path, model)
     try:
         uploaded = client.files.create(file=jsonl_path.open("rb"), purpose="batch")
-        batch = client.batches.create(input_file_id=uploaded.id, endpoint="/v1/responses", completion_window="24h")
+        batch = client.batches.create(input_file_id=uploaded.id, endpoint="/v1/chat/completions", completion_window="24h")
         print(json.dumps({"batch_id": batch.id, "input_file_id": uploaded.id, "jsonl": str(jsonl_path)}, indent=2))
         return False
     except Exception as exc:
@@ -224,10 +229,7 @@ def import_batch_results(con, result_path, model=DEFAULT_MODEL):
                 print(f"batch_error mention_id={mention_id} error={item['error']}")
                 continue
             body = item["response"]["body"]
-            output_text = body.get("output_text")
-            if output_text is None:
-                output = body.get("output") or []
-                output_text = output[0]["content"][0]["text"]
+            output_text = body["choices"][0]["message"]["content"]
             payload = validate_analysis(json.loads(output_text))
             save_analysis(con, mention_id, payload, body.get("model") or model, json.dumps(body, ensure_ascii=False))
     con.commit()

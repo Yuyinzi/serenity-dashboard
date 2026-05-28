@@ -4,16 +4,16 @@ import sqlite3
 import scripts.analyze_sentiment as sentiment
 
 
-def test_build_analysis_input_focuses_on_symbol():
-    item = sentiment.build_analysis_input({
+def test_build_messages_focuses_on_symbol():
+    messages = sentiment.build_messages({
         "mention_id": 7,
         "symbol": "NVDA",
         "text": "Bullish on $NVDA, but worried about $NOK execution.",
         "mentioned_at": "2026-05-28T04:04:48Z",
     })
 
-    assert "NVDA" in item["input"][1]["content"]
-    assert "Bullish on $NVDA" in item["input"][1]["content"]
+    assert "NVDA" in messages[1]["content"]
+    assert "Bullish on $NVDA" in messages[1]["content"]
 
 
 def test_validate_analysis_accepts_expected_schema():
