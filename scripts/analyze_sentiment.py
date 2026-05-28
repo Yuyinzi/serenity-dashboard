@@ -4,6 +4,7 @@ import datetime as dt
 import json
 import os
 import sqlite3
+import sys
 from pathlib import Path
 
 from openai import OpenAI
@@ -190,7 +191,7 @@ def write_batch_jsonl(rows, path, model=DEFAULT_MODEL):
     return path
 
 
-def create_batch(rows, output_path, config):
+def create_batch(con, rows, output_path, config):
     if not rows:
         raise SystemExit("no pending mentions to batch")
     client = _client(config)
@@ -200,7 +201,13 @@ def create_batch(rows, output_path, config):
         uploaded = client.files.create(file=jsonl_path.open("rb"), purpose="batch")
         batch = client.batches.create(input_file_id=uploaded.id, endpoint="/v1/responses", completion_window="24h")
         print(json.dumps({"batch_id": batch.id, "input_file_id": uploaded.id, "jsonl": str(jsonl_path)}, indent=2))
+        return False
     except Exception as exc:
+        status = getattr(exc, "status_code", None)
+        if status is not None and status != 401 and status != 403:
+            print(f"Batch API unavailable (HTTP {status}), falling back to direct mode...", file=sys.stderr)
+            analyze_direct(con, rows, config)
+            return True
         detail = str(exc)
         body = getattr(exc, "body", None)
         if body:
@@ -246,7 +253,7 @@ def main():
     if args.command == "direct":
         analyze_direct(con, pending_mentions(con, args.limit, args.symbol, args.force), config)
     elif args.command == "batch-create":
-        create_batch(pending_mentions(con, args.limit, args.symbol, args.force), Path(args.batch_jsonl), config)
+        create_batch(con, pending_mentions(con, args.limit, args.symbol, args.force), Path(args.batch_jsonl), config)
     elif args.command == "batch-import":
         if not args.batch_results:
             raise SystemExit("--batch-results is required")
