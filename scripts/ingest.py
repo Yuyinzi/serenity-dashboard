@@ -94,6 +94,19 @@ def connect():
         );
         create index if not exists idx_mentions_symbol_time on mentions(symbol, mentioned_at);
         create index if not exists idx_prices_symbol_date on prices(symbol, date);
+        create table if not exists tweet_media (
+            id integer primary key autoincrement,
+            tweet_id text not null references tweets(tweet_id) on delete cascade,
+            media_key text,
+            media_type text not null,
+            media_url_https text not null,
+            expanded_url text,
+            width integer,
+            height integer,
+            source text not null,
+            unique(tweet_id, media_url_https)
+        );
+        create index if not exists idx_tweet_media_tweet on tweet_media(tweet_id);
         """
     )
     return con
@@ -177,8 +190,30 @@ def normalize_tweet(node):
         "retweet_count": legacy.get("retweet_count") or 0,
         "quote_count": legacy.get("quote_count") or 0,
         "symbols": extract_symbols(text, legacy, note),
+        "media": extract_media(legacy),
         "raw_json": json.dumps(node, ensure_ascii=False, separators=(",", ":")),
     }
+
+
+def extract_media(legacy):
+    media_items = (legacy.get("extended_entities") or {}).get("media") or (legacy.get("entities") or {}).get("media") or []
+    seen = set()
+    results = []
+    for item in media_items:
+        url = item.get("media_url_https")
+        if not url or url in seen:
+            continue
+        seen.add(url)
+        original = item.get("original_info") or {}
+        results.append({
+            "media_key": item.get("media_key"),
+            "media_type": item.get("type") or "unknown",
+            "media_url_https": url,
+            "expanded_url": item.get("expanded_url"),
+            "width": original.get("width"),
+            "height": original.get("height"),
+        })
+    return results
 
 
 def parse_x_date(value):
@@ -234,6 +269,21 @@ def ingest_page(con, source, body, data, cursor):
             con.execute(
                 "insert or ignore into mentions(symbol, tweet_id, mentioned_at, text, source) values (?, ?, ?, ?, ?)",
                 (symbol, t["tweet_id"], t["created_at"], t["text"], source),
+            )
+        for media in t["media"]:
+            con.execute(
+                """insert or ignore into tweet_media(tweet_id, media_key, media_type, media_url_https,
+                   expanded_url, width, height, source) values (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    t["tweet_id"],
+                    media["media_key"],
+                    media["media_type"],
+                    media["media_url_https"],
+                    media["expanded_url"],
+                    media["width"],
+                    media["height"],
+                    source,
+                ),
             )
     return len(tweets)
 

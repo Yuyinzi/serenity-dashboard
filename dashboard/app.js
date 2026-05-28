@@ -163,6 +163,7 @@ function renderFeed(items) {
     <article class="feed-item">
       <div><span class="ticker">$${i.symbol}</span> <span class="tiny">${fmtDate(i.mentioned_at)} / ${i.source}</span></div>
       <p>${escapeHtml(clip(i.text, 340))}</p>
+      ${(i.media || []).length ? `<div class="media-strip">${i.media.map(m => `<a href="${m.expanded_url || m.media_url_https}" target="_blank" rel="noreferrer"><img src="${m.media_url_https}" alt="" loading="lazy"></a>`).join('')}</div>` : ''}
       <a href="${i.url}" target="_blank" rel="noreferrer">open on X</a>
     </article>
   `).join('');

@@ -30,6 +30,23 @@ def clamp_limit(query, default=80, maximum=200):
     return max(1, min(value, maximum))
 
 
+def media_for_tweets(con, tweet_ids):
+    if not tweet_ids:
+        return {}
+    placeholders = ",".join("?" for _ in tweet_ids)
+    rows = con.execute(
+        f"""select tweet_id, media_type, media_url_https, expanded_url, width, height
+            from tweet_media where tweet_id in ({placeholders})
+            order by id""",
+        tweet_ids,
+    ).fetchall()
+    grouped = {}
+    for row in rows:
+        item = dict(row)
+        grouped.setdefault(item.pop("tweet_id"), []).append(item)
+    return grouped
+
+
 class Handler(SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=str(STATIC_DIR), **kwargs)
@@ -64,10 +81,17 @@ class Handler(SimpleHTTPRequestHandler):
             return summary(con)
         if path == "/api/feed":
             limit = clamp_limit(query, default=80, maximum=200)
-            return {"items": [dict(r) for r in con.execute(
-                """select m.symbol, m.mentioned_at, m.text, t.url, t.favorite_count, t.reply_count, t.source
+            rows = con.execute(
+                """select m.symbol, m.mentioned_at, m.text, t.url, t.favorite_count, t.reply_count, t.source, t.tweet_id
                        from mentions m join tweets t on t.tweet_id=m.tweet_id
-                       order by m.mentioned_at desc limit ?""", (limit,))]}
+                       order by m.mentioned_at desc limit ?""", (limit,)
+            ).fetchall()
+            items = [dict(r) for r in rows]
+            tweet_ids = [item["tweet_id"] for item in items]
+            grouped = media_for_tweets(con, tweet_ids)
+            for item in items:
+                item["media"] = grouped.get(item.pop("tweet_id"), [])
+            return {"items": items}
         if path.startswith("/api/symbol/"):
             symbol = unquote(path.rsplit("/", 1)[-1]).upper()
             return symbol_payload(con, symbol)
@@ -104,10 +128,14 @@ def symbol_payload(con, symbol):
         "select date, close, volume from prices where symbol=? order by date", (symbol,)
     )]
     mentions = [dict(r) for r in con.execute(
-        """select m.symbol, m.mentioned_at, m.text, t.url, t.favorite_count, t.reply_count, t.retweet_count, t.source
+        """select m.symbol, m.mentioned_at, m.text, t.url, t.favorite_count, t.reply_count, t.retweet_count, t.source, t.tweet_id
                from mentions m join tweets t on t.tweet_id=m.tweet_id
                where m.symbol=? order by m.mentioned_at""", (symbol,)
     )]
+    mention_ids = [m["tweet_id"] for m in mentions]
+    grouped = media_for_tweets(con, mention_ids)
+    for m in mentions:
+        m["media"] = grouped.get(m.pop("tweet_id"), [])
     neighbors = [dict(r) for r in con.execute(
         """select m2.symbol, count(*) count
                from mentions m1 join mentions m2 on m1.tweet_id=m2.tweet_id and m1.symbol<>m2.symbol

@@ -159,3 +159,56 @@ def test_symbol_alias_suggestions_flag_common_variants():
     assert {"symbol": "SIVE", "suggestion": "SIVEF", "reason": "existing F-suffix variant"} in suggestions
     assert {"symbol": "LPK", "suggestion": "LPK.DE", "reason": "existing dotted exchange variant"} in suggestions
     assert {"symbol": "APPL", "suggestion": "AAPL", "reason": "common typo"} in suggestions
+
+
+def test_extract_media_reads_extended_entities_first_and_dedupes():
+    legacy = {
+        "entities": {
+            "media": [
+                {
+                    "media_key": "3_a",
+                    "type": "photo",
+                    "media_url_https": "https://pbs.twimg.com/media/a.jpg",
+                    "expanded_url": "https://x.com/u/status/1/photo/1",
+                    "original_info": {"width": 100, "height": 80},
+                }
+            ]
+        },
+        "extended_entities": {
+            "media": [
+                {
+                    "media_key": "3_a",
+                    "type": "photo",
+                    "media_url_https": "https://pbs.twimg.com/media/a.jpg",
+                    "expanded_url": "https://x.com/u/status/1/photo/1",
+                    "original_info": {"width": 100, "height": 80},
+                },
+                {
+                    "media_key": "3_b",
+                    "type": "photo",
+                    "media_url_https": "https://pbs.twimg.com/media/b.jpg",
+                    "expanded_url": "https://x.com/u/status/1/photo/2",
+                    "original_info": {"width": 120, "height": 90},
+                },
+            ]
+        },
+    }
+
+    assert ingest.extract_media(legacy) == [
+        {
+            "media_key": "3_a",
+            "media_type": "photo",
+            "media_url_https": "https://pbs.twimg.com/media/a.jpg",
+            "expanded_url": "https://x.com/u/status/1/photo/1",
+            "width": 100,
+            "height": 80,
+        },
+        {
+            "media_key": "3_b",
+            "media_type": "photo",
+            "media_url_https": "https://pbs.twimg.com/media/b.jpg",
+            "expanded_url": "https://x.com/u/status/1/photo/2",
+            "width": 120,
+            "height": 90,
+        },
+    ]

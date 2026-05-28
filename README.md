@@ -75,6 +75,8 @@ EOF_CURL
 
 注意：`x_curl/*.curl` 内的登录态可能过期；若抓取返回空或报错，重新从浏览器复制 curl 后再运行。
 
+Media handling stores image metadata and `pbs.twimg.com` URLs from X responses. It does not download or mirror image bytes locally.
+
 ---
 
 # Serenity Signal Dashboard (English)
