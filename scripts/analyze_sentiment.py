@@ -78,6 +78,7 @@ ANALYSIS_SYSTEM_PROMPT = (
     "neutral for factual mentions, and mixed for both positive and negative signals.\n"
     "Score is -1.0 to 1.0, confidence is 0.0 to 1.0.\n"
     "This is research metadata, not financial advice.\n"
+    "Respond in JSON.\n"
     "\n"
     'Return: {"results": [{"mention_id": <int>, "sentiment": "<positive|negative|neutral|mixed>", '
     '"score": <number -1..1>, "confidence": <number 0..1>, "rationale": "<one sentence>"}]}'
