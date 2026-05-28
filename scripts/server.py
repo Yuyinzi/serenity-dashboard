@@ -22,6 +22,14 @@ def one(con, sql, params=()):
     return dict(row) if row else {}
 
 
+def clamp_limit(query, default=80, maximum=200):
+    try:
+        value = int((query.get("limit") or [default])[0])
+    except (TypeError, ValueError):
+        value = default
+    return max(1, min(value, maximum))
+
+
 class Handler(SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=str(STATIC_DIR), **kwargs)
@@ -55,7 +63,7 @@ class Handler(SimpleHTTPRequestHandler):
         if path == "/api/summary":
             return summary(con)
         if path == "/api/feed":
-            limit = int((query.get("limit") or [80])[0])
+            limit = clamp_limit(query, default=80, maximum=200)
             return {"items": [dict(r) for r in con.execute(
                 """select m.symbol, m.mentioned_at, m.text, t.url, t.favorite_count, t.reply_count, t.source
                        from mentions m join tweets t on t.tweet_id=m.tweet_id
