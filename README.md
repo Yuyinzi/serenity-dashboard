@@ -18,9 +18,11 @@
 python3 -m venv .venv
 .venv/bin/python -m pip install -r requirements.txt
 
-python3 scripts/ingest.py all --max-pages 10 --days 500 --min-mentions 3
-python3 scripts/server.py --port 8787
+.venv/bin/python scripts/ingest.py all --max-pages 10 --days 500 --min-mentions 3
+.venv/bin/python scripts/server.py --port 8787
 ```
+
+需要 Python 3.10+；本仓库中的类型标注使用了 `str | None` 语法。
 
 打开 `http://127.0.0.1:8787`。
 
@@ -65,9 +67,9 @@ EOF_CURL
 ## 常用命令
 
 ```bash
-python3 scripts/ingest.py fetch-x --max-pages 20
-python3 scripts/ingest.py prices --days 700 --min-mentions 2
-python3 scripts/ingest.py stats
+.venv/bin/python scripts/ingest.py fetch-x --max-pages 20
+.venv/bin/python scripts/ingest.py prices --days 700 --min-mentions 2
+.venv/bin/python scripts/ingest.py stats
 ```
 
 注意：`x_curl/*.curl` 内的登录态可能过期；若抓取返回空或报错，重新从浏览器复制 curl 后再运行。
@@ -94,9 +96,11 @@ If you do not want to set up the local project yourself, subscribe to [@iamai_om
 python3 -m venv .venv
 .venv/bin/python -m pip install -r requirements.txt
 
-python3 scripts/ingest.py all --max-pages 10 --days 500 --min-mentions 3
-python3 scripts/server.py --port 8787
+.venv/bin/python scripts/ingest.py all --max-pages 10 --days 500 --min-mentions 3
+.venv/bin/python scripts/server.py --port 8787
 ```
+
+Python 3.10+ is required; this repository uses `str | None` type annotations.
 
 Open `http://127.0.0.1:8787`.
 
@@ -141,9 +145,9 @@ Warning: `x_curl/*.curl` contains login cookies/tokens and is ignored by `.gitig
 ## Common Commands
 
 ```bash
-python3 scripts/ingest.py fetch-x --max-pages 20
-python3 scripts/ingest.py prices --days 700 --min-mentions 2
-python3 scripts/ingest.py stats
+.venv/bin/python scripts/ingest.py fetch-x --max-pages 20
+.venv/bin/python scripts/ingest.py prices --days 700 --min-mentions 2
+.venv/bin/python scripts/ingest.py stats
 ```
 
 If X fetching returns empty or invalid responses, copy fresh curl commands from Chrome and run the ingestion again.
