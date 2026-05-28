@@ -26,6 +26,9 @@ python3 -m venv .venv
 # Show database stats
 .venv/bin/python scripts/ingest.py stats
 
+# Show diagnostics: DB counts, curl file status, missing price symbols
+.venv/bin/python scripts/ingest.py diagnostics --min-mentions 2
+
 # Backfill prices from TradingView (for symbols Yahoo lacks, like OTC tickers)
 .venv/bin/python scripts/fetch_tv_price.py --exchange OTC --tv-symbol SIVEF --db-symbol SIVE
 

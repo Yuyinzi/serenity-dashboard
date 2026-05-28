@@ -259,6 +259,71 @@ def symbol_list(con, min_mentions=2):
     return [r[0] for r in rows]
 
 
+def database_diagnostics(con, min_mentions=2):
+    stats = con.execute(
+        """
+        select (select count(*) from tweets) tweets,
+               (select count(*) from mentions) mentions,
+               (select count(distinct symbol) from mentions) symbols,
+               (select max(mentioned_at) from mentions) latest_mention,
+               (select count(distinct symbol) from prices) priced_symbols
+        """
+    ).fetchone()
+    missing = con.execute(
+        """
+        select m.symbol, count(*) mentions
+        from mentions m
+        left join prices p on p.symbol = m.symbol
+        group by m.symbol
+        having count(*) >= ? and count(p.symbol) = 0
+        order by mentions desc, m.symbol
+        limit 25
+        """,
+        (min_mentions,),
+    ).fetchall()
+    return {
+        "tweets": stats[0],
+        "mentions": stats[1],
+        "symbols": stats[2],
+        "latest_mention": stats[3],
+        "priced_symbols": stats[4],
+        "missing_price_symbols": [{"symbol": row[0], "mentions": row[1]} for row in missing],
+    }
+
+
+def curl_diagnostics(curl_dir=X_CURL_DIR):
+    rows = []
+    for source, filename in CURL_FILES.items():
+        path = curl_dir / filename
+        rows.append({
+            "source": source,
+            "path": str(path),
+            "exists": path.exists(),
+            "bytes": path.stat().st_size if path.exists() else 0,
+        })
+    return rows
+
+
+def print_diagnostics(min_mentions=2):
+    con = connect()
+    info = database_diagnostics(con, min_mentions=min_mentions)
+    print("database", DB_PATH)
+    print("tweets", info["tweets"])
+    print("mentions", info["mentions"])
+    print("symbols", info["symbols"])
+    print("priced_symbols", info["priced_symbols"])
+    print("latest_mention", info["latest_mention"] or "-")
+    print("curl_files")
+    for row in curl_diagnostics():
+        status = "ok" if row["exists"] else "missing"
+        print(f"  {row['source']}: {status} {row['bytes']} bytes {row['path']}")
+    print("missing_price_symbols")
+    if not info["missing_price_symbols"]:
+        print("  none")
+    for row in info["missing_price_symbols"]:
+        print(f"  {row['symbol']} mentions={row['mentions']}")
+
+
 def yahoo_chart(symbol, start, end):
     period1 = int(start.timestamp())
     period2 = int(end.timestamp())
@@ -308,7 +373,7 @@ def fetch_prices(days_back=420, min_mentions=2):
 
 def main():
     ap = argparse.ArgumentParser(description="Ingest Serenity X posts, symbols and Yahoo prices into SQLite.")
-    ap.add_argument("command", choices=["fetch-x", "prices", "all", "stats"])
+    ap.add_argument("command", choices=["fetch-x", "prices", "all", "stats", "diagnostics"])
     ap.add_argument("--max-pages", type=int, default=20)
     ap.add_argument("--days", type=int, default=420)
     ap.add_argument("--min-mentions", type=int, default=2)
@@ -317,6 +382,8 @@ def main():
         fetch_x(args.max_pages)
     if args.command in {"prices", "all"}:
         fetch_prices(args.days, args.min_mentions)
+    if args.command == "diagnostics":
+        print_diagnostics(args.min_mentions)
     if args.command == "stats":
         con = connect()
         print("tweets", con.execute("select count(*) from tweets").fetchone()[0])

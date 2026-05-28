@@ -70,6 +70,7 @@ EOF_CURL
 .venv/bin/python scripts/ingest.py fetch-x --max-pages 20
 .venv/bin/python scripts/ingest.py prices --days 700 --min-mentions 2
 .venv/bin/python scripts/ingest.py stats
+.venv/bin/python scripts/ingest.py diagnostics --min-mentions 2
 ```
 
 注意：`x_curl/*.curl` 内的登录态可能过期；若抓取返回空或报错，重新从浏览器复制 curl 后再运行。
@@ -148,6 +149,7 @@ Warning: `x_curl/*.curl` contains login cookies/tokens and is ignored by `.gitig
 .venv/bin/python scripts/ingest.py fetch-x --max-pages 20
 .venv/bin/python scripts/ingest.py prices --days 700 --min-mentions 2
 .venv/bin/python scripts/ingest.py stats
+.venv/bin/python scripts/ingest.py diagnostics --min-mentions 2
 ```
 
 If X fetching returns empty or invalid responses, copy fresh curl commands from Chrome and run the ingestion again.
