@@ -64,3 +64,5 @@ Open `http://127.0.0.1:8787` after starting the server.
 - **The `$SYMBOL` extraction** uses regex `CASHTAG_RE`, X entities.symbols, and note tweet entities, with noise filtering and length bounds (2-10 chars).
 - **Dashboard aesthetic:** editorial market-ledger feel — warm paper background, bold display typography (Bebas Neue, IBM Plex Serif), green/orange color scheme. Avoid generic white-card SaaS styling.
 - **No test suite exists.** Validate changes by running the server and checking the dashboard manually, or with `python3 -m py_compile`.
+
+Price ingestion is idempotent, incremental, and freshness-aware. Existing `(symbol, date)` rows are replaced, not duplicated. Symbols with a latest price bar within `--refresh-days` are skipped, and stale symbols fetch from their latest saved bar instead of refetching the full range. Use `--symbol NVDA --symbol TSM` to retry only selected symbols after a network/provider failure.

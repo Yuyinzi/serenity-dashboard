@@ -89,3 +89,42 @@ def test_curl_diagnostics_reports_expected_files(tmp_path):
     assert by_source["posts"]["bytes"] > 0
     assert by_source["replies"]["exists"] is False
     assert by_source["premium"]["exists"] is False
+
+
+def test_last_price_date_returns_latest_price_date():
+    con = sqlite3.connect(":memory:")
+    con.execute("create table prices(symbol text, date text, close real, volume integer)")
+    con.executemany(
+        "insert into prices(symbol, date, close, volume) values (?, ?, ?, ?)",
+        [
+            ("NVDA", "2026-05-26", 101.0, 1000),
+            ("NVDA", "2026-05-28", 123.45, 2000),
+            ("TSM", "2026-05-27", 99.0, 3000),
+        ],
+    )
+
+    assert ingest.last_price_date(con, "NVDA") == dt.date(2026, 5, 28)
+    assert ingest.last_price_date(con, "MISSING") is None
+
+
+def test_should_fetch_prices_skips_fresh_symbol():
+    today = dt.date(2026, 5, 28)
+
+    assert ingest.should_fetch_prices(dt.date(2026, 5, 28), today, refresh_days=1) is False
+    assert ingest.should_fetch_prices(dt.date(2026, 5, 27), today, refresh_days=1) is False
+    assert ingest.should_fetch_prices(dt.date(2026, 5, 26), today, refresh_days=1) is True
+    assert ingest.should_fetch_prices(None, today, refresh_days=1) is True
+
+
+def test_price_start_date_uses_last_saved_bar_for_incremental_fetch():
+    today = dt.datetime(2026, 5, 28, tzinfo=dt.timezone.utc)
+
+    assert ingest.price_start_datetime(None, today, days_back=420).date() == dt.date(2025, 4, 3)
+    assert ingest.price_start_datetime(dt.date(2026, 5, 20), today, days_back=420).date() == dt.date(2026, 5, 20)
+
+
+def test_filter_symbols_limits_price_retry_set():
+    symbols = ["NVDA", "SIVE", "TSM"]
+
+    assert ingest.filter_symbols(symbols, ["sive", "nvda"]) == ["NVDA", "SIVE"]
+    assert ingest.filter_symbols(symbols, []) == symbols

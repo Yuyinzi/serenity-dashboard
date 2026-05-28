@@ -333,18 +333,54 @@ def yahoo_chart(symbol, start, end):
         return json.loads(resp.read().decode("utf-8"))
 
 
-def fetch_prices(days_back=420, min_mentions=2):
+def last_price_date(con, symbol):
+    row = con.execute("select max(date) from prices where symbol=?", (symbol,)).fetchone()
+    if not row or not row[0]:
+        return None
+    return dt.date.fromisoformat(row[0])
+
+
+def should_fetch_prices(last_date, today, refresh_days=1):
+    if last_date is None:
+        return True
+    return (today - last_date).days > refresh_days
+
+
+def price_start_datetime(last_date, today, days_back=420):
+    if last_date is None:
+        return today - dt.timedelta(days=days_back)
+    return dt.datetime.combine(last_date, dt.time.min, tzinfo=dt.timezone.utc)
+
+
+def filter_symbols(symbols, selected):
+    wanted = {s.upper() for s in selected if s.strip()}
+    if not wanted:
+        return symbols
+    return [symbol for symbol in symbols if symbol.upper() in wanted]
+
+
+def fetch_prices(days_back=420, min_mentions=2, refresh_days=1, only_symbols=None, price_pause=1.0):
     con = connect()
     symbols = symbol_list(con, min_mentions)
+    symbols = filter_symbols(symbols, only_symbols or [])
     if not symbols:
         print("no symbols yet; run fetch-x first")
         return
+    if only_symbols and not symbols:
+        print("no selected symbols matched current mentions")
+        return
     today = dt.datetime.now(dt.timezone.utc)
+    today_date = today.date()
     start = today - dt.timedelta(days=days_back)
     for symbol in symbols:
+        last_date = last_price_date(con, symbol)
+        if not should_fetch_prices(last_date, today_date, refresh_days):
+            print(f"skip {symbol}: latest price date {last_date}")
+            continue
         try:
             print(f"price {symbol}")
-            data = yahoo_chart(symbol, start, today + dt.timedelta(days=2))
+            fetch_start = price_start_datetime(last_date, today, days_back)
+            data = yahoo_chart(symbol, fetch_start, today + dt.timedelta(days=2))
             result = (data.get("chart") or {}).get("result") or []
             if not result:
                 print(f"  no yahoo result for {symbol}")
@@ -366,7 +402,7 @@ def fetch_prices(days_back=420, min_mentions=2):
                 inserted += 1
             con.commit()
             print(f"  {inserted} bars")
-            time.sleep(0.2)
+            time.sleep(price_pause)
         except Exception as exc:
             print(f"  failed {symbol}: {exc}", file=sys.stderr)
 
@@ -377,11 +413,13 @@ def main():
     ap.add_argument("--max-pages", type=int, default=20)
     ap.add_argument("--days", type=int, default=420)
     ap.add_argument("--min-mentions", type=int, default=2)
+    ap.add_argument("--refresh-days", type=int, default=1, help="Skip price symbols with a latest bar within this many days.")
+    ap.add_argument("--symbol", action="append", default=[], help="Fetch prices only for this symbol. Can be repeated.")
     args = ap.parse_args()
     if args.command in {"fetch-x", "all"}:
         fetch_x(args.max_pages)
     if args.command in {"prices", "all"}:
-        fetch_prices(args.days, args.min_mentions)
+        fetch_prices(args.days, args.min_mentions, args.refresh_days, args.symbol)
     if args.command == "diagnostics":
         print_diagnostics(args.min_mentions)
     if args.command == "stats":
