@@ -33,19 +33,22 @@ def load_config(args):
     }
 
 
-def pending_mentions(con, limit=200, symbol=None):
+def pending_mentions(con, limit=200, symbol=None, force=False):
     params = []
-    where = ["a.mention_id is null"]
+    where = []
+    if not force:
+        where.append("a.mention_id is null")
     if symbol:
         where.append("m.symbol = ?")
         params.append(symbol.upper())
     params.append(limit)
+    where_sql = " and ".join(where) if where else "1=1"
     return con.execute(
         f"""
         select m.id mention_id, m.symbol, m.tweet_id, m.mentioned_at, m.text, m.source
         from mentions m
         left join mention_analysis a on a.mention_id = m.id
-        where {' and '.join(where)}
+        where {where_sql}
         order by m.mentioned_at desc
         limit ?
         """,
@@ -201,6 +204,7 @@ def main():
     parser.add_argument("--model")
     parser.add_argument("--openai-api-key")
     parser.add_argument("--openai-base-url")
+    parser.add_argument("-f", "--force", action="store_true", help="Re-analyze mentions that already have sentiment rows.")
     parser.add_argument("--batch-jsonl", default="data/openai_batches/mention_sentiment.jsonl")
     parser.add_argument("--batch-results")
     args = parser.parse_args()
@@ -210,9 +214,9 @@ def main():
 
     con = connect()
     if args.command == "direct":
-        analyze_direct(con, pending_mentions(con, args.limit, args.symbol), config)
+        analyze_direct(con, pending_mentions(con, args.limit, args.symbol, args.force), config)
     elif args.command == "batch-create":
-        create_batch(pending_mentions(con, args.limit, args.symbol), Path(args.batch_jsonl), config)
+        create_batch(pending_mentions(con, args.limit, args.symbol, args.force), Path(args.batch_jsonl), config)
     elif args.command == "batch-import":
         if not args.batch_results:
             raise SystemExit("--batch-results is required")
