@@ -21,6 +21,18 @@ def connect():
     return con
 
 
+def load_config(args):
+    env_path = ROOT / ".env"
+    if env_path.exists():
+        from dotenv import load_dotenv
+        load_dotenv(env_path)
+    return {
+        "api_key": args.openai_api_key or os.getenv("OPENAI_API_KEY"),
+        "base_url": args.openai_base_url or os.getenv("OPENAI_BASE_URL"),
+        "model": args.model or os.getenv("OPENAI_SENTIMENT_MODEL") or DEFAULT_MODEL,
+    }
+
+
 def pending_mentions(con, limit=200, symbol=None):
     params = []
     where = ["a.mention_id is null"]
@@ -120,8 +132,9 @@ def save_analysis(con, mention_id, payload, model, raw_json):
     )
 
 
-def analyze_direct(con, rows, model=DEFAULT_MODEL):
-    client = OpenAI()
+def analyze_direct(con, rows, config):
+    client = OpenAI(api_key=config["api_key"], base_url=config["base_url"])
+    model = config["model"]
     for row in rows:
         request = build_analysis_input(row)
         response = client.responses.create(
@@ -153,8 +166,9 @@ def write_batch_jsonl(rows, path, model=DEFAULT_MODEL):
     return path
 
 
-def create_batch(rows, output_path, model=DEFAULT_MODEL):
-    client = OpenAI()
+def create_batch(rows, output_path, config):
+    client = OpenAI(api_key=config["api_key"], base_url=config["base_url"])
+    model = config["model"]
     jsonl_path = write_batch_jsonl(rows, output_path, model)
     uploaded = client.files.create(file=jsonl_path.open("rb"), purpose="batch")
     batch = client.batches.create(input_file_id=uploaded.id, endpoint="/v1/responses", completion_window="24h")
@@ -184,20 +198,25 @@ def main():
     parser.add_argument("command", choices=["direct", "batch-create", "batch-import"])
     parser.add_argument("--limit", type=int, default=200)
     parser.add_argument("--symbol")
-    parser.add_argument("--model", default=DEFAULT_MODEL)
+    parser.add_argument("--model")
+    parser.add_argument("--openai-api-key")
+    parser.add_argument("--openai-base-url")
     parser.add_argument("--batch-jsonl", default="data/openai_batches/mention_sentiment.jsonl")
     parser.add_argument("--batch-results")
     args = parser.parse_args()
+    config = load_config(args)
+    if not config["api_key"] and args.command in {"direct", "batch-create"}:
+        raise SystemExit("OPENAI_API_KEY is required via .env, environment, or --openai-api-key")
 
     con = connect()
     if args.command == "direct":
-        analyze_direct(con, pending_mentions(con, args.limit, args.symbol), args.model)
+        analyze_direct(con, pending_mentions(con, args.limit, args.symbol), config)
     elif args.command == "batch-create":
-        create_batch(pending_mentions(con, args.limit, args.symbol), Path(args.batch_jsonl), args.model)
+        create_batch(pending_mentions(con, args.limit, args.symbol), Path(args.batch_jsonl), config)
     elif args.command == "batch-import":
         if not args.batch_results:
             raise SystemExit("--batch-results is required")
-        import_batch_results(con, args.batch_results, args.model)
+        import_batch_results(con, args.batch_results, config["model"])
 
 
 if __name__ == "__main__":

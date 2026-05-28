@@ -76,12 +76,13 @@ EOF_CURL
 Sentiment analysis:
 
 ```bash
-OPENAI_API_KEY=... .venv/bin/python scripts/analyze_sentiment.py direct --limit 20
-OPENAI_API_KEY=... .venv/bin/python scripts/analyze_sentiment.py batch-create --limit 1000
+cp .env.example .env
+.venv/bin/python scripts/analyze_sentiment.py direct --limit 20
+.venv/bin/python scripts/analyze_sentiment.py batch-create --limit 1000
 .venv/bin/python scripts/analyze_sentiment.py batch-import --batch-results data/openai_batches/results.jsonl
 ```
 
-OpenAI sentiment analysis is optional and requires `OPENAI_API_KEY`. The default model is `gpt-5.4-mini` because it is cost-efficient but stronger than the nano tier for nuanced finance language. Use `--model gpt-5.4-nano` for cheaper/high-volume experiments after spot-checking quality. For backfills, prefer Batch mode because it is asynchronous and cheaper; for a handful of new mentions, direct mode is simpler.
+OpenAI sentiment analysis is optional and reads config from `.env` or environment variables. Set `OPENAI_API_KEY`, optionally set `OPENAI_BASE_URL` for an OpenAI-compatible gateway, and optionally set `OPENAI_SENTIMENT_MODEL`. The default model is `gpt-5.4-mini` because it is cost-efficient but stronger than the nano tier for nuanced finance language. Use `OPENAI_SENTIMENT_MODEL=gpt-5.4-nano` or `--model gpt-5.4-nano` for cheaper/high-volume experiments after spot-checking quality. For backfills, prefer Batch mode because it is asynchronous and cheaper; for a handful of new mentions, direct mode is simpler.
 
 注意：`x_curl/*.curl` 内的登录态可能过期；若抓取返回空或报错，重新从浏览器复制 curl 后再运行。
 
@@ -167,11 +168,12 @@ Warning: `x_curl/*.curl` contains login cookies/tokens and is ignored by `.gitig
 Sentiment analysis:
 
 ```bash
-OPENAI_API_KEY=... .venv/bin/python scripts/analyze_sentiment.py direct --limit 20
-OPENAI_API_KEY=... .venv/bin/python scripts/analyze_sentiment.py batch-create --limit 1000
+cp .env.example .env
+.venv/bin/python scripts/analyze_sentiment.py direct --limit 20
+.venv/bin/python scripts/analyze_sentiment.py batch-create --limit 1000
 .venv/bin/python scripts/analyze_sentiment.py batch-import --batch-results data/openai_batches/results.jsonl
 ```
 
-OpenAI sentiment analysis is optional and requires `OPENAI_API_KEY`. The default model is `gpt-5.4-mini` because it is cost-efficient but stronger than the nano tier for nuanced finance language. Use `--model gpt-5.4-nano` for cheaper/high-volume experiments after spot-checking quality. For backfills, prefer Batch mode because it is asynchronous and cheaper; for a handful of new mentions, direct mode is simpler.
+OpenAI sentiment analysis is optional and reads config from `.env` or environment variables. Set `OPENAI_API_KEY`, optionally set `OPENAI_BASE_URL` for an OpenAI-compatible gateway, and optionally set `OPENAI_SENTIMENT_MODEL`. The default model is `gpt-5.4-mini` because it is cost-efficient but stronger than the nano tier for nuanced finance language. Use `OPENAI_SENTIMENT_MODEL=gpt-5.4-nano` or `--model gpt-5.4-nano` for cheaper/high-volume experiments after spot-checking quality. For backfills, prefer Batch mode because it is asynchronous and cheaper; for a handful of new mentions, direct mode is simpler.
 
 If X fetching returns empty or invalid responses, copy fresh curl commands from Chrome and run the ingestion again.

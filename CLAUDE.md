@@ -29,11 +29,12 @@ python3 -m venv .venv
 # Show diagnostics: DB counts, curl file status, missing price symbols
 .venv/bin/python scripts/ingest.py diagnostics --min-mentions 2
 
-# Analyze mention sentiment with OpenAI (direct mode for small batches)
-OPENAI_API_KEY=... .venv/bin/python scripts/analyze_sentiment.py direct --limit 20
+# Analyze mention sentiment with OpenAI (reads OPENAI_API_KEY from .env)
+cp .env.example .env
+.venv/bin/python scripts/analyze_sentiment.py direct --limit 20
 
 # Create OpenAI Batch for cost-efficient backfill
-OPENAI_API_KEY=... .venv/bin/python scripts/analyze_sentiment.py batch-create --limit 1000
+.venv/bin/python scripts/analyze_sentiment.py batch-create --limit 1000
 
 # Import completed batch results
 .venv/bin/python scripts/analyze_sentiment.py batch-import --batch-results data/openai_batches/results.jsonl
