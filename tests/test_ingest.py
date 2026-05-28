@@ -1,4 +1,5 @@
 import datetime as dt
+import logging
 import sqlite3
 
 import scripts.ingest as ingest
@@ -140,3 +141,13 @@ def test_is_rate_limit_error_detects_common_provider_messages():
     assert ingest.is_rate_limit_error(Exception("HTTP Error 429: Too Many Requests")) is True
     assert ingest.is_rate_limit_error(Exception("rate limit exceeded")) is True
     assert ingest.is_rate_limit_error(Exception("temporary name resolution failure")) is False
+
+
+def test_configure_logging_sets_named_logger_level(tmp_path):
+    log_path = tmp_path / "ingest.log"
+
+    logger = ingest.configure_logging("DEBUG", log_path)
+
+    assert logger.name == "serenity.ingest"
+    assert logger.level == logging.DEBUG
+    assert any(isinstance(handler, logging.FileHandler) for handler in logger.handlers)

@@ -3,6 +3,7 @@ import argparse
 import datetime as dt
 import html
 import json
+import logging
 import os
 import re
 import shlex
@@ -26,6 +27,24 @@ CURL_FILES = {
 }
 CASHTAG_RE = re.compile(r"(?<![A-Za-z0-9_])\$([A-Z][A-Z0-9.]{0,9})(?![A-Za-z0-9_])")
 NOISE_SYMBOLS = {"AI", "I", "A", "USD", "US", "CEO", "ETF", "IPO"}
+LOGGER = logging.getLogger("serenity.ingest")
+
+
+def configure_logging(level="INFO", log_file=None):
+    numeric_level = getattr(logging, level.upper(), logging.INFO)
+    LOGGER.handlers.clear()
+    LOGGER.setLevel(numeric_level)
+    formatter = logging.Formatter("%(asctime)s %(levelname)s %(message)s")
+    stream_handler = logging.StreamHandler()
+    stream_handler.setFormatter(formatter)
+    LOGGER.addHandler(stream_handler)
+    if log_file:
+        Path(log_file).parent.mkdir(parents=True, exist_ok=True)
+        file_handler = logging.FileHandler(log_file)
+        file_handler.setFormatter(formatter)
+        LOGGER.addHandler(file_handler)
+    LOGGER.propagate = False
+    return LOGGER
 
 
 def connect():
@@ -230,11 +249,11 @@ def fetch_x(max_pages=20, pause=1.5):
             if cursor in seen:
                 break
             seen.add(cursor)
-            print(f"fetch {source} page={page + 1} cursor={'initial' if not cursor else cursor[:18]}")
+            LOGGER.info("fetch_x source=%s page=%s cursor=%s", source, page + 1, "initial" if not cursor else cursor[:18])
             try:
                 body, data = curl_fetch(X_CURL_DIR / filename, cursor)
             except Exception as exc:
-                print(f"  stop {source}: {exc}", file=sys.stderr)
+                LOGGER.warning("fetch_x stop source=%s error=%s", source, exc)
                 break
             raw_path = RAW_DIR / f"{source}_{page + 1}.json"
             raw_path.write_text(body)
@@ -246,7 +265,7 @@ def fetch_x(max_pages=20, pause=1.5):
                 break
             cursor = next_cursor
             time.sleep(pause)
-    print(f"saved/updated {total} tweet rows into {DB_PATH}")
+    LOGGER.info("fetch_x complete tweets=%s db=%s", total, DB_PATH)
 
 
 def symbol_list(con, min_mentions=2):
@@ -375,10 +394,7 @@ def fetch_prices(days_back=420, min_mentions=2, refresh_days=1, only_symbols=Non
     symbols = symbol_list(con, min_mentions)
     symbols = filter_symbols(symbols, only_symbols or [])
     if not symbols:
-        print("no symbols yet; run fetch-x first")
-        return
-    if only_symbols and not symbols:
-        print("no selected symbols matched current mentions")
+        LOGGER.info("prices skipped reason=no_symbols")
         return
     today = dt.datetime.now(dt.timezone.utc)
     today_date = today.date()
@@ -386,15 +402,15 @@ def fetch_prices(days_back=420, min_mentions=2, refresh_days=1, only_symbols=Non
     for symbol in symbols:
         last_date = last_price_date(con, symbol)
         if not should_fetch_prices(last_date, today_date, refresh_days):
-            print(f"skip {symbol}: latest price date {last_date}")
+            LOGGER.info("price skip symbol=%s latest_date=%s", symbol, last_date)
             continue
         try:
-            print(f"price {symbol}")
+            LOGGER.info("price fetch symbol=%s", symbol)
             fetch_start = price_start_datetime(last_date, today, days_back)
             data = yahoo_chart(symbol, fetch_start, today + dt.timedelta(days=2))
             result = (data.get("chart") or {}).get("result") or []
             if not result:
-                print(f"  no yahoo result for {symbol}")
+                LOGGER.warning("price no_result symbol=%s", symbol)
                 continue
             res = result[0]
             timestamps = res.get("timestamp") or []
@@ -412,13 +428,13 @@ def fetch_prices(days_back=420, min_mentions=2, refresh_days=1, only_symbols=Non
                 )
                 inserted += 1
             con.commit()
-            print(f"  {inserted} bars")
+            LOGGER.info("price saved symbol=%s bars=%s", symbol, inserted)
             time.sleep(price_pause)
         except Exception as exc:
-            print(f"  failed {symbol}: {exc}", file=sys.stderr)
+            LOGGER.warning("price failed symbol=%s error=%s", symbol, exc)
             if is_rate_limit_error(exc):
                 wait = backoff_seconds(1, base=max(price_pause, 2.0), maximum=60.0)
-                print(f"  rate limited; stopping price fetch after waiting {wait:.1f}s", file=sys.stderr)
+                LOGGER.warning("rate limited; stopping price fetch after waiting %.1fs", wait)
                 time.sleep(wait)
                 break
 
@@ -433,7 +449,10 @@ def main():
     ap.add_argument("--symbol", action="append", default=[], help="Fetch prices only for this symbol. Can be repeated.")
     ap.add_argument("--x-pause", type=float, default=1.5, help="Seconds to wait between X GraphQL page requests.")
     ap.add_argument("--price-pause", type=float, default=1.0, help="Seconds to wait between Yahoo chart requests.")
+    ap.add_argument("--log-level", default="INFO", choices=["DEBUG", "INFO", "WARNING", "ERROR"])
+    ap.add_argument("--log-file", help="Optional local log file path, e.g. logs/ingest.log")
     args = ap.parse_args()
+    configure_logging(args.log_level, args.log_file)
     if args.command in {"fetch-x", "all"}:
         fetch_x(args.max_pages, args.x_pause)
     if args.command in {"prices", "all"}:

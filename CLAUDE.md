@@ -70,3 +70,5 @@ Price ingestion is idempotent, incremental, and freshness-aware. Existing `(symb
 Politeness defaults: X page requests pause for `--x-pause 1.5` seconds by default, Yahoo price requests pause for `--price-pause 1.0` seconds by default, and Yahoo rate-limit responses stop the current price run. Keep `--max-pages` modest, prefer incremental price runs, and use `--symbol` to retry only failures.
 
 The X fetch path uses browser-copied authenticated GraphQL requests. Treat it as personal local archival tooling, keep request volume low, and refresh curl files only from an account/session you control.
+
+Ingestion uses Python logging for operational progress and failures. Use `--log-level DEBUG` for more detail and `--log-file logs/ingest.log` to keep a local run history. `stats` and `diagnostics` intentionally print human-readable command output.
