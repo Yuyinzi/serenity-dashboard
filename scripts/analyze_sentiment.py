@@ -79,9 +79,8 @@ ANALYSIS_SYSTEM_PROMPT = (
     "Score is -1.0 to 1.0, confidence is 0.0 to 1.0.\n"
     "This is research metadata, not financial advice.\n"
     "\n"
-    "Return a JSON array with one object per mention:\n"
-    '[{"mention_id": <int>, "sentiment": "<positive|negative|neutral|mixed>", '
-    '"score": <number -1..1>, "confidence": <number 0..1>, "rationale": "<one sentence>"}]'
+    'Return: {"results": [{"mention_id": <int>, "sentiment": "<positive|negative|neutral|mixed>", '
+    '"score": <number -1..1>, "confidence": <number 0..1>, "rationale": "<one sentence>"}]}'
 )
 
 
