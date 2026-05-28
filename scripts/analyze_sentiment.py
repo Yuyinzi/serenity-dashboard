@@ -72,42 +72,31 @@ def pending_mentions(con, limit=200, symbol=None, force=False):
 
 
 ANALYSIS_SYSTEM_PROMPT = (
-    "You classify the author's stance toward one stock symbol in one X post.\n"
-    "Return sentiment positive, negative, neutral, or mixed.\n"
+    "You classify the author's stance toward stock symbols mentioned in X posts.\n"
+    "For each mention, return sentiment positive, negative, neutral, or mixed.\n"
     "Use positive for constructive/bullish views, negative for bearish/concerned views,\n"
     "neutral for factual mentions, and mixed for both positive and negative signals.\n"
     "Score is -1.0 to 1.0, confidence is 0.0 to 1.0.\n"
     "This is research metadata, not financial advice.\n"
     "\n"
-    "Respond with exactly this JSON structure:\n"
-    '{"sentiment": "<positive|negative|neutral|mixed>", "score": <number -1..1>, '
-    '"confidence": <number 0..1>, "rationale": "<one sentence>"}'
+    "Return a JSON array with one object per mention:\n"
+    '[{"mention_id": <int>, "sentiment": "<positive|negative|neutral|mixed>", '
+    '"score": <number -1..1>, "confidence": <number 0..1>, "rationale": "<one sentence>"}]'
 )
 
-SENTIMENT_JSON_SCHEMA = {
-    "type": "object",
-    "additionalProperties": False,
-    "properties": {
-        "sentiment": {"type": "string", "enum": ["positive", "negative", "neutral", "mixed"]},
-        "score": {"type": "number"},
-        "confidence": {"type": "number"},
-        "rationale": {"type": "string"},
-    },
-    "required": ["sentiment", "score", "confidence", "rationale"],
-}
 
-
-def build_messages(row):
+def build_batch_messages(rows):
+    items = []
+    for row in rows:
+        items.append(
+            f'{{"mention_id": {row["mention_id"]}, '
+            f'"symbol": "{row["symbol"]}", '
+            f'"mentioned_at": "{row["mentioned_at"]}", '
+            f'"text": {json.dumps(row["text"], ensure_ascii=False)}}}'
+        )
     return [
         {"role": "system", "content": ANALYSIS_SYSTEM_PROMPT},
-        {
-            "role": "user",
-            "content": (
-                f"Symbol: {row['symbol']}\n"
-                f"Mention time: {row['mentioned_at']}\n"
-                f"Post text:\n{row['text']}"
-            ),
-        },
+        {"role": "user", "content": "Analyze these mentions:\n" + "\n".join(items)},
     ]
 
 
@@ -155,17 +144,30 @@ def _client(config):
 def analyze_direct(con, rows, config):
     client = _client(config)
     model = config["model"]
-    for row in rows:
-        messages = build_messages(row)
+    batch_size = 50
+    for i in range(0, len(rows), batch_size):
+        chunk = rows[i : i + batch_size]
+        messages = build_batch_messages(chunk)
         response = client.chat.completions.create(
             model=model,
             messages=messages,
             response_format={"type": "json_object"},
         )
-        payload = validate_analysis(json.loads(response.choices[0].message.content))
-        save_analysis(con, row["mention_id"], payload, model, response.model_dump_json())
+        body = json.loads(response.choices[0].message.content)
+        results = body if isinstance(body, list) else body.get("results", body.get("items", []))
+        by_id = {row["mention_id"]: row for row in chunk}
+        for item in results:
+            mid = item.get("mention_id")
+            row = by_id.get(mid)
+            if not row:
+                continue
+            try:
+                payload = validate_analysis(item)
+                save_analysis(con, mid, payload, model, json.dumps(item, ensure_ascii=False))
+                print(f"analyzed mention_id={mid} symbol={row['symbol']} sentiment={payload['sentiment']}")
+            except ValueError as exc:
+                print(f"skip mention_id={mid}: {exc}", file=sys.stderr)
         con.commit()
-        print(f"analyzed mention_id={row['mention_id']} symbol={row['symbol']} sentiment={payload['sentiment']}")
 
 
 def write_batch_jsonl(rows, path, model=DEFAULT_MODEL):
@@ -178,7 +180,7 @@ def write_batch_jsonl(rows, path, model=DEFAULT_MODEL):
                 "url": "/v1/chat/completions",
                 "body": {
                     "model": model,
-                    "messages": build_messages(row),
+                    "messages": build_batch_messages([row]),
                     "response_format": {"type": "json_object"},
                 },
             }, ensure_ascii=False) + "\n")
