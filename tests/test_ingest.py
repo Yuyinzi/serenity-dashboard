@@ -128,3 +128,15 @@ def test_filter_symbols_limits_price_retry_set():
 
     assert ingest.filter_symbols(symbols, ["sive", "nvda"]) == ["NVDA", "SIVE"]
     assert ingest.filter_symbols(symbols, []) == symbols
+
+
+def test_backoff_seconds_grows_with_failures_and_caps():
+    assert ingest.backoff_seconds(1, base=1.0, maximum=30.0) == 1.0
+    assert ingest.backoff_seconds(2, base=1.0, maximum=30.0) == 2.0
+    assert ingest.backoff_seconds(6, base=1.0, maximum=30.0) == 30.0
+
+
+def test_is_rate_limit_error_detects_common_provider_messages():
+    assert ingest.is_rate_limit_error(Exception("HTTP Error 429: Too Many Requests")) is True
+    assert ingest.is_rate_limit_error(Exception("rate limit exceeded")) is True
+    assert ingest.is_rate_limit_error(Exception("temporary name resolution failure")) is False

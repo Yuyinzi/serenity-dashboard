@@ -66,3 +66,7 @@ Open `http://127.0.0.1:8787` after starting the server.
 - **No test suite exists.** Validate changes by running the server and checking the dashboard manually, or with `python3 -m py_compile`.
 
 Price ingestion is idempotent, incremental, and freshness-aware. Existing `(symbol, date)` rows are replaced, not duplicated. Symbols with a latest price bar within `--refresh-days` are skipped, and stale symbols fetch from their latest saved bar instead of refetching the full range. Use `--symbol NVDA --symbol TSM` to retry only selected symbols after a network/provider failure.
+
+Politeness defaults: X page requests pause for `--x-pause 1.5` seconds by default, Yahoo price requests pause for `--price-pause 1.0` seconds by default, and Yahoo rate-limit responses stop the current price run. Keep `--max-pages` modest, prefer incremental price runs, and use `--symbol` to retry only failures.
+
+The X fetch path uses browser-copied authenticated GraphQL requests. Treat it as personal local archival tooling, keep request volume low, and refresh curl files only from an account/session you control.

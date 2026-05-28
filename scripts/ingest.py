@@ -219,7 +219,7 @@ def ingest_page(con, source, body, data, cursor):
     return len(tweets)
 
 
-def fetch_x(max_pages=20, pause=0.8):
+def fetch_x(max_pages=20, pause=1.5):
     RAW_DIR.mkdir(parents=True, exist_ok=True)
     con = connect()
     total = 0
@@ -359,6 +359,17 @@ def filter_symbols(symbols, selected):
     return [symbol for symbol in symbols if symbol.upper() in wanted]
 
 
+def backoff_seconds(failures, base=2.0, maximum=60.0):
+    if failures <= 0:
+        return 0.0
+    return min(maximum, base * (2 ** (failures - 1)))
+
+
+def is_rate_limit_error(exc):
+    text = str(exc).lower()
+    return "429" in text or "too many requests" in text or "rate limit" in text
+
+
 def fetch_prices(days_back=420, min_mentions=2, refresh_days=1, only_symbols=None, price_pause=1.0):
     con = connect()
     symbols = symbol_list(con, min_mentions)
@@ -405,6 +416,11 @@ def fetch_prices(days_back=420, min_mentions=2, refresh_days=1, only_symbols=Non
             time.sleep(price_pause)
         except Exception as exc:
             print(f"  failed {symbol}: {exc}", file=sys.stderr)
+            if is_rate_limit_error(exc):
+                wait = backoff_seconds(1, base=max(price_pause, 2.0), maximum=60.0)
+                print(f"  rate limited; stopping price fetch after waiting {wait:.1f}s", file=sys.stderr)
+                time.sleep(wait)
+                break
 
 
 def main():
@@ -415,11 +431,13 @@ def main():
     ap.add_argument("--min-mentions", type=int, default=2)
     ap.add_argument("--refresh-days", type=int, default=1, help="Skip price symbols with a latest bar within this many days.")
     ap.add_argument("--symbol", action="append", default=[], help="Fetch prices only for this symbol. Can be repeated.")
+    ap.add_argument("--x-pause", type=float, default=1.5, help="Seconds to wait between X GraphQL page requests.")
+    ap.add_argument("--price-pause", type=float, default=1.0, help="Seconds to wait between Yahoo chart requests.")
     args = ap.parse_args()
     if args.command in {"fetch-x", "all"}:
-        fetch_x(args.max_pages)
+        fetch_x(args.max_pages, args.x_pause)
     if args.command in {"prices", "all"}:
-        fetch_prices(args.days, args.min_mentions, args.refresh_days, args.symbol)
+        fetch_prices(args.days, args.min_mentions, args.refresh_days, args.symbol, args.price_pause)
     if args.command == "diagnostics":
         print_diagnostics(args.min_mentions)
     if args.command == "stats":
