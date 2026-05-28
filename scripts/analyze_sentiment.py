@@ -201,7 +201,11 @@ def create_batch(rows, output_path, config):
         batch = client.batches.create(input_file_id=uploaded.id, endpoint="/v1/responses", completion_window="24h")
         print(json.dumps({"batch_id": batch.id, "input_file_id": uploaded.id, "jsonl": str(jsonl_path)}, indent=2))
     except Exception as exc:
-        raise SystemExit(f"OpenAI batch-create failed: {exc}") from exc
+        detail = str(exc)
+        body = getattr(exc, "body", None)
+        if body:
+            detail = f"{detail}\n{json.dumps(body, indent=2, ensure_ascii=False)}"
+        raise SystemExit(f"OpenAI batch-create failed: {detail}") from exc
 
 
 def import_batch_results(con, result_path, model=DEFAULT_MODEL):
