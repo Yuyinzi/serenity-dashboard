@@ -82,8 +82,10 @@ class Handler(SimpleHTTPRequestHandler):
         if path == "/api/feed":
             limit = clamp_limit(query, default=80, maximum=200)
             rows = con.execute(
-                """select m.symbol, m.mentioned_at, m.text, t.url, t.favorite_count, t.reply_count, t.source, t.tweet_id
+                """select m.symbol, m.mentioned_at, m.text, t.url, t.favorite_count, t.reply_count, t.source, t.tweet_id,
+                          a.sentiment, a.score sentiment_score, a.confidence sentiment_confidence, a.rationale sentiment_rationale
                        from mentions m join tweets t on t.tweet_id=m.tweet_id
+                       left join mention_analysis a on a.mention_id = m.id
                        order by m.mentioned_at desc limit ?""", (limit,)
             ).fetchall()
             items = [dict(r) for r in rows]
@@ -128,8 +130,10 @@ def symbol_payload(con, symbol):
         "select date, close, volume from prices where symbol=? order by date", (symbol,)
     )]
     mentions = [dict(r) for r in con.execute(
-        """select m.symbol, m.mentioned_at, m.text, t.url, t.favorite_count, t.reply_count, t.retweet_count, t.source, t.tweet_id
+        """select m.symbol, m.mentioned_at, m.text, t.url, t.favorite_count, t.reply_count, t.retweet_count, t.source, t.tweet_id,
+                  a.sentiment, a.score sentiment_score, a.confidence sentiment_confidence, a.rationale sentiment_rationale
                from mentions m join tweets t on t.tweet_id=m.tweet_id
+               left join mention_analysis a on a.mention_id = m.id
                where m.symbol=? order by m.mentioned_at""", (symbol,)
     )]
     mention_ids = [m["tweet_id"] for m in mentions]

@@ -2,6 +2,12 @@ let state = { symbols: [], active: null, filter: 'all', chart: null };
 const $ = (id) => document.getElementById(id);
 const fmtDate = (v) => v ? new Date(v).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '-';
 const money = (v) => v == null ? '-' : `$${Number(v).toFixed(2)}`;
+const sentimentColor = (s) => ({
+  positive: '#1f7a4f',
+  negative: '#c2412d',
+  neutral: '#6b6e62',
+  mixed: '#b7791f'
+}[s] || '#ff6b35');
 const clip = (s, n = 220) => (s || '').length > n ? `${s.slice(0, n)}...` : (s || '');
 const dateOnly = (v) => (v || '').slice(0, 10);
 
@@ -119,7 +125,7 @@ function renderChart(data) {
       labels: prices.map(p => p.date),
       datasets: [
         { label: `${data.symbol} close`, data: prices.map(p => p.close), borderColor: '#1f7a4f', borderWidth: 2.5, pointRadius: 0, tension: .22, fill: true, backgroundColor: 'rgba(31,122,79,.10)' },
-        { type: 'scatter', label: 'mentions', data: mentionPoints, parsing: false, pointRadius: 6, pointHoverRadius: 9, pointBackgroundColor: '#ff6b35', pointBorderColor: '#182019', pointBorderWidth: 1.5 }
+        { type: 'scatter', label: 'mentions', data: mentionPoints, parsing: false, pointRadius: 6, pointHoverRadius: 9, pointBackgroundColor: ctx => sentimentColor(ctx.raw?.mention?.sentiment), pointBorderColor: '#182019', pointBorderWidth: 1.5 }
       ]
     },
     options: {
@@ -149,7 +155,7 @@ function renderChart(data) {
             title: items => items[0].raw?.mention ? fmtDate(items[0].raw.mention.mentioned_at) : items[0].label,
             label: item => {
               if (!item.raw?.mention) return `${money(item.parsed.y)}`;
-              return [`${data.symbol} close ${money(item.parsed.y)}`, ...wrapTooltipText(item.raw.mention.text)];
+              return [`${data.symbol} close ${money(item.parsed.y)}`, `${item.raw.mention.sentiment || 'unanalyzed'} / confidence ${item.raw.mention.sentiment_confidence ?? '-'}`, ...wrapTooltipText(item.raw.mention.text)];
             }
           }
         }
@@ -161,7 +167,7 @@ function renderChart(data) {
 function renderFeed(items) {
   $('feed').innerHTML = items.map(i => `
     <article class="feed-item">
-      <div><span class="ticker">$${i.symbol}</span> <span class="tiny">${fmtDate(i.mentioned_at)} / ${i.source}</span></div>
+      <div><span class="ticker">$${i.symbol}</span> ${i.sentiment ? `<span class="sentiment ${i.sentiment}">${i.sentiment}</span>` : `<span class="sentiment pending">pending</span>`} <span class="tiny">${fmtDate(i.mentioned_at)} / ${i.source}</span></div>
       <p>${escapeHtml(clip(i.text, 340))}</p>
       ${(i.media || []).length ? `<div class="media-strip">${i.media.map(m => `<a href="${m.expanded_url || m.media_url_https}" target="_blank" rel="noreferrer"><img src="${m.media_url_https}" alt="" loading="lazy"></a>`).join('')}</div>` : ''}
       <a href="${i.url}" target="_blank" rel="noreferrer">open on X</a>

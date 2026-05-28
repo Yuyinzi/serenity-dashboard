@@ -29,11 +29,21 @@ python3 -m venv .venv
 # Show diagnostics: DB counts, curl file status, missing price symbols
 .venv/bin/python scripts/ingest.py diagnostics --min-mentions 2
 
+# Analyze mention sentiment with OpenAI (direct mode for small batches)
+OPENAI_API_KEY=... .venv/bin/python scripts/analyze_sentiment.py direct --limit 20
+
+# Create OpenAI Batch for cost-efficient backfill
+OPENAI_API_KEY=... .venv/bin/python scripts/analyze_sentiment.py batch-create --limit 1000
+
+# Import completed batch results
+.venv/bin/python scripts/analyze_sentiment.py batch-import --batch-results data/openai_batches/results.jsonl
+
 # Backfill prices from TradingView (for symbols Yahoo lacks, like OTC tickers)
 .venv/bin/python scripts/fetch_tv_price.py --exchange OTC --tv-symbol SIVEF --db-symbol SIVE
 
-# Validate Python syntax (there is no test suite or linter configured)
-python3 -m py_compile scripts/ingest.py scripts/server.py
+# Run tests
+.venv/bin/python -m pytest
+.venv/bin/python -m py_compile scripts/ingest.py scripts/server.py
 ```
 
 Open `http://127.0.0.1:8787` after starting the server.

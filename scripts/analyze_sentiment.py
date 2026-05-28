@@ -1,0 +1,204 @@
+#!/usr/bin/env python3
+import argparse
+import datetime as dt
+import json
+import os
+import sqlite3
+from pathlib import Path
+
+from openai import OpenAI
+
+ROOT = Path(__file__).resolve().parents[1]
+DB_PATH = ROOT / "data" / "serenity.sqlite"
+PROMPT_VERSION = "sentiment-v1"
+DEFAULT_MODEL = "gpt-5.4-mini"
+SENTIMENTS = {"positive", "negative", "neutral", "mixed"}
+
+
+def connect():
+    con = sqlite3.connect(DB_PATH)
+    con.row_factory = sqlite3.Row
+    return con
+
+
+def pending_mentions(con, limit=200, symbol=None):
+    params = []
+    where = ["a.mention_id is null"]
+    if symbol:
+        where.append("m.symbol = ?")
+        params.append(symbol.upper())
+    params.append(limit)
+    return con.execute(
+        f"""
+        select m.id mention_id, m.symbol, m.tweet_id, m.mentioned_at, m.text, m.source
+        from mentions m
+        left join mention_analysis a on a.mention_id = m.id
+        where {' and '.join(where)}
+        order by m.mentioned_at desc
+        limit ?
+        """,
+        params,
+    ).fetchall()
+
+
+def response_schema():
+    return {
+        "type": "json_schema",
+        "name": "mention_sentiment",
+        "strict": True,
+        "schema": {
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "sentiment": {"type": "string", "enum": ["positive", "negative", "neutral", "mixed"]},
+                "score": {"type": "number"},
+                "confidence": {"type": "number"},
+                "rationale": {"type": "string"},
+            },
+            "required": ["sentiment", "score", "confidence", "rationale"],
+        },
+    }
+
+
+def build_analysis_input(row):
+    return {
+        "input": [
+            {
+                "role": "system",
+                "content": (
+                    "You classify the author's stance toward one stock symbol in one X post. "
+                    "Return sentiment positive, negative, neutral, or mixed. "
+                    "Use positive for constructive/bullish views, negative for bearish/concerned views, "
+                    "neutral for factual mentions, and mixed for both positive and negative signals. "
+                    "Score is -1.0 to 1.0, confidence is 0.0 to 1.0. "
+                    "This is research metadata, not financial advice."
+                ),
+            },
+            {
+                "role": "user",
+                "content": (
+                    f"Symbol: {row['symbol']}\n"
+                    f"Mention time: {row['mentioned_at']}\n"
+                    f"Post text:\n{row['text']}"
+                ),
+            },
+        ]
+    }
+
+
+def validate_analysis(payload):
+    if payload.get("sentiment") not in SENTIMENTS:
+        raise ValueError("sentiment must be positive, negative, neutral, or mixed")
+    score = payload.get("score")
+    confidence = payload.get("confidence")
+    if not isinstance(score, (int, float)) or not -1 <= score <= 1:
+        raise ValueError("score must be a number from -1 to 1")
+    if not isinstance(confidence, (int, float)) or not 0 <= confidence <= 1:
+        raise ValueError("confidence must be a number from 0 to 1")
+    if not payload.get("rationale"):
+        raise ValueError("rationale is required")
+    return payload
+
+
+def save_analysis(con, mention_id, payload, model, raw_json):
+    now = dt.datetime.now(dt.timezone.utc).isoformat().replace("+00:00", "Z")
+    con.execute(
+        """insert or replace into mention_analysis
+           (mention_id, sentiment, score, confidence, rationale, model, prompt_version, analyzed_at, raw_json)
+           values (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (
+            mention_id,
+            payload["sentiment"],
+            float(payload["score"]),
+            float(payload["confidence"]),
+            payload["rationale"],
+            model,
+            PROMPT_VERSION,
+            now,
+            raw_json,
+        ),
+    )
+
+
+def analyze_direct(con, rows, model=DEFAULT_MODEL):
+    client = OpenAI()
+    for row in rows:
+        request = build_analysis_input(row)
+        response = client.responses.create(
+            model=model,
+            input=request["input"],
+            text={"format": response_schema()},
+        )
+        payload = validate_analysis(json.loads(response.output_text))
+        save_analysis(con, row["mention_id"], payload, model, response.model_dump_json())
+        con.commit()
+        print(f"analyzed mention_id={row['mention_id']} symbol={row['symbol']} sentiment={payload['sentiment']}")
+
+
+def write_batch_jsonl(rows, path, model=DEFAULT_MODEL):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8") as fh:
+        for row in rows:
+            request = build_analysis_input(row)
+            fh.write(json.dumps({
+                "custom_id": f"mention:{row['mention_id']}",
+                "method": "POST",
+                "url": "/v1/responses",
+                "body": {
+                    "model": model,
+                    "input": request["input"],
+                    "text": {"format": response_schema()},
+                },
+            }, ensure_ascii=False) + "\n")
+    return path
+
+
+def create_batch(rows, output_path, model=DEFAULT_MODEL):
+    client = OpenAI()
+    jsonl_path = write_batch_jsonl(rows, output_path, model)
+    uploaded = client.files.create(file=jsonl_path.open("rb"), purpose="batch")
+    batch = client.batches.create(input_file_id=uploaded.id, endpoint="/v1/responses", completion_window="24h")
+    print(json.dumps({"batch_id": batch.id, "input_file_id": uploaded.id, "jsonl": str(jsonl_path)}, indent=2))
+
+
+def import_batch_results(con, result_path, model=DEFAULT_MODEL):
+    with Path(result_path).open("r", encoding="utf-8") as fh:
+        for line in fh:
+            item = json.loads(line)
+            mention_id = int(item["custom_id"].split(":", 1)[1])
+            if item.get("error"):
+                print(f"batch_error mention_id={mention_id} error={item['error']}")
+                continue
+            body = item["response"]["body"]
+            output_text = body.get("output_text")
+            if output_text is None:
+                output = body.get("output") or []
+                output_text = output[0]["content"][0]["text"]
+            payload = validate_analysis(json.loads(output_text))
+            save_analysis(con, mention_id, payload, body.get("model") or model, json.dumps(body, ensure_ascii=False))
+    con.commit()
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Analyze mention sentiment with OpenAI.")
+    parser.add_argument("command", choices=["direct", "batch-create", "batch-import"])
+    parser.add_argument("--limit", type=int, default=200)
+    parser.add_argument("--symbol")
+    parser.add_argument("--model", default=DEFAULT_MODEL)
+    parser.add_argument("--batch-jsonl", default="data/openai_batches/mention_sentiment.jsonl")
+    parser.add_argument("--batch-results")
+    args = parser.parse_args()
+
+    con = connect()
+    if args.command == "direct":
+        analyze_direct(con, pending_mentions(con, args.limit, args.symbol), args.model)
+    elif args.command == "batch-create":
+        create_batch(pending_mentions(con, args.limit, args.symbol), Path(args.batch_jsonl), args.model)
+    elif args.command == "batch-import":
+        if not args.batch_results:
+            raise SystemExit("--batch-results is required")
+        import_batch_results(con, args.batch_results, args.model)
+
+
+if __name__ == "__main__":
+    main()

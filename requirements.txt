@@ -4,3 +4,6 @@ tradingview-scraper==0.4.20
 
 # Test runner for the local hardening suite.
 pytest==8.3.5
+
+# OpenAI for mention sentiment analysis.
+openai==2.12.0

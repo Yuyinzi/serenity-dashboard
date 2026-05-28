@@ -107,6 +107,18 @@ def connect():
             unique(tweet_id, media_url_https)
         );
         create index if not exists idx_tweet_media_tweet on tweet_media(tweet_id);
+        create table if not exists mention_analysis (
+            mention_id integer primary key references mentions(id) on delete cascade,
+            sentiment text not null check(sentiment in ('positive', 'negative', 'neutral', 'mixed')),
+            score real not null,
+            confidence real not null,
+            rationale text not null,
+            model text not null,
+            prompt_version text not null,
+            analyzed_at text not null,
+            raw_json text not null
+        );
+        create index if not exists idx_mention_analysis_sentiment on mention_analysis(sentiment);
         """
     )
     return con

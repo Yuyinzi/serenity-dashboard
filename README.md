@@ -73,6 +73,16 @@ EOF_CURL
 .venv/bin/python scripts/ingest.py diagnostics --min-mentions 2
 ```
 
+Sentiment analysis:
+
+```bash
+OPENAI_API_KEY=... .venv/bin/python scripts/analyze_sentiment.py direct --limit 20
+OPENAI_API_KEY=... .venv/bin/python scripts/analyze_sentiment.py batch-create --limit 1000
+.venv/bin/python scripts/analyze_sentiment.py batch-import --batch-results data/openai_batches/results.jsonl
+```
+
+OpenAI sentiment analysis is optional and requires `OPENAI_API_KEY`. The default model is `gpt-5.4-mini` because it is cost-efficient but stronger than the nano tier for nuanced finance language. Use `--model gpt-5.4-nano` for cheaper/high-volume experiments after spot-checking quality. For backfills, prefer Batch mode because it is asynchronous and cheaper; for a handful of new mentions, direct mode is simpler.
+
 注意：`x_curl/*.curl` 内的登录态可能过期；若抓取返回空或报错，重新从浏览器复制 curl 后再运行。
 
 Media handling stores image metadata and `pbs.twimg.com` URLs from X responses. It does not download or mirror image bytes locally.
@@ -153,5 +163,15 @@ Warning: `x_curl/*.curl` contains login cookies/tokens and is ignored by `.gitig
 .venv/bin/python scripts/ingest.py stats
 .venv/bin/python scripts/ingest.py diagnostics --min-mentions 2
 ```
+
+Sentiment analysis:
+
+```bash
+OPENAI_API_KEY=... .venv/bin/python scripts/analyze_sentiment.py direct --limit 20
+OPENAI_API_KEY=... .venv/bin/python scripts/analyze_sentiment.py batch-create --limit 1000
+.venv/bin/python scripts/analyze_sentiment.py batch-import --batch-results data/openai_batches/results.jsonl
+```
+
+OpenAI sentiment analysis is optional and requires `OPENAI_API_KEY`. The default model is `gpt-5.4-mini` because it is cost-efficient but stronger than the nano tier for nuanced finance language. Use `--model gpt-5.4-nano` for cheaper/high-volume experiments after spot-checking quality. For backfills, prefer Batch mode because it is asynchronous and cheaper; for a handful of new mentions, direct mode is simpler.
 
 If X fetching returns empty or invalid responses, copy fresh curl commands from Chrome and run the ingestion again.
