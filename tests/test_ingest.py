@@ -151,3 +151,11 @@ def test_configure_logging_sets_named_logger_level(tmp_path):
     assert logger.name == "serenity.ingest"
     assert logger.level == logging.DEBUG
     assert any(isinstance(handler, logging.FileHandler) for handler in logger.handlers)
+
+
+def test_symbol_alias_suggestions_flag_common_variants():
+    suggestions = ingest.symbol_alias_suggestions(["SIVE", "SIVEF", "LPK", "LPK.DE", "APPL", "AAPL"])
+
+    assert {"symbol": "SIVE", "suggestion": "SIVEF", "reason": "existing F-suffix variant"} in suggestions
+    assert {"symbol": "LPK", "suggestion": "LPK.DE", "reason": "existing dotted exchange variant"} in suggestions
+    assert {"symbol": "APPL", "suggestion": "AAPL", "reason": "common typo"} in suggestions

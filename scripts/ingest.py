@@ -341,6 +341,13 @@ def print_diagnostics(min_mentions=2):
         print("  none")
     for row in info["missing_price_symbols"]:
         print(f"  {row['symbol']} mentions={row['mentions']}")
+    symbols = [row[0] for row in con.execute("select distinct symbol from mentions order by symbol")]
+    suggestions = symbol_alias_suggestions(symbols)
+    print("alias_suggestions")
+    if not suggestions:
+        print("  none")
+    for row in suggestions[:25]:
+        print(f"  {row['symbol']} -> {row['suggestion']} ({row['reason']})")
 
 
 def yahoo_chart(symbol, start, end):
@@ -387,6 +394,27 @@ def backoff_seconds(failures, base=2.0, maximum=60.0):
 def is_rate_limit_error(exc):
     text = str(exc).lower()
     return "429" in text or "too many requests" in text or "rate limit" in text
+
+
+COMMON_SYMBOL_TYPOS = {
+    "APPL": "AAPL",
+}
+
+
+def symbol_alias_suggestions(symbols):
+    present = {s.upper() for s in symbols}
+    suggestions = []
+    for symbol in sorted(present):
+        typo_target = COMMON_SYMBOL_TYPOS.get(symbol)
+        if typo_target and typo_target in present:
+            suggestions.append({"symbol": symbol, "suggestion": typo_target, "reason": "common typo"})
+        f_variant = f"{symbol}F"
+        if f_variant in present:
+            suggestions.append({"symbol": symbol, "suggestion": f_variant, "reason": "existing F-suffix variant"})
+        dotted = sorted(s for s in present if s.startswith(f"{symbol}."))
+        if dotted:
+            suggestions.append({"symbol": symbol, "suggestion": dotted[0], "reason": "existing dotted exchange variant"})
+    return suggestions
 
 
 def fetch_prices(days_back=420, min_mentions=2, refresh_days=1, only_symbols=None, price_pause=1.0):
