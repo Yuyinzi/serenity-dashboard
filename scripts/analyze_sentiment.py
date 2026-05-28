@@ -72,13 +72,16 @@ def pending_mentions(con, limit=200, symbol=None, force=False):
 
 
 ANALYSIS_SYSTEM_PROMPT = (
-    "You classify the author's stance toward one stock symbol in one X post. "
-    "Return sentiment positive, negative, neutral, or mixed. "
-    "Use positive for constructive/bullish views, negative for bearish/concerned views, "
-    "neutral for factual mentions, and mixed for both positive and negative signals. "
-    "Score is -1.0 to 1.0, confidence is 0.0 to 1.0. "
-    "This is research metadata, not financial advice. "
-    "Respond with a JSON object containing keys: sentiment, score, confidence, rationale."
+    "You classify the author's stance toward one stock symbol in one X post.\n"
+    "Return sentiment positive, negative, neutral, or mixed.\n"
+    "Use positive for constructive/bullish views, negative for bearish/concerned views,\n"
+    "neutral for factual mentions, and mixed for both positive and negative signals.\n"
+    "Score is -1.0 to 1.0, confidence is 0.0 to 1.0.\n"
+    "This is research metadata, not financial advice.\n"
+    "\n"
+    "Respond with exactly this JSON structure:\n"
+    '{"sentiment": "<positive|negative|neutral|mixed>", "score": <number -1..1>, '
+    '"confidence": <number 0..1>, "rationale": "<one sentence>"}'
 )
 
 SENTIMENT_JSON_SCHEMA = {
@@ -157,14 +160,7 @@ def analyze_direct(con, rows, config):
         response = client.chat.completions.create(
             model=model,
             messages=messages,
-            response_format={
-                "type": "json_schema",
-                "json_schema": {
-                    "name": "mention_sentiment",
-                    "strict": True,
-                    "schema": SENTIMENT_JSON_SCHEMA,
-                },
-            },
+            response_format={"type": "json_object"},
         )
         payload = validate_analysis(json.loads(response.choices[0].message.content))
         save_analysis(con, row["mention_id"], payload, model, response.model_dump_json())
@@ -183,14 +179,7 @@ def write_batch_jsonl(rows, path, model=DEFAULT_MODEL):
                 "body": {
                     "model": model,
                     "messages": build_messages(row),
-                    "response_format": {
-                        "type": "json_schema",
-                        "json_schema": {
-                            "name": "mention_sentiment",
-                            "strict": True,
-                            "schema": SENTIMENT_JSON_SCHEMA,
-                        },
-                    },
+                    "response_format": {"type": "json_object"},
                 },
             }, ensure_ascii=False) + "\n")
     return path
