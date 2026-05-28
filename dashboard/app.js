@@ -3,11 +3,11 @@ const $ = (id) => document.getElementById(id);
 const fmtDate = (v) => v ? new Date(v).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '-';
 const money = (v) => v == null ? '-' : `$${Number(v).toFixed(2)}`;
 const sentimentColor = (s) => ({
-  positive: '#1f7a4f',
-  negative: '#c2412d',
-  neutral: '#6b6e62',
-  mixed: '#b7791f'
-}[s] || '#ff6b35');
+  positive: '#0ea858',
+  negative: '#e03a1e',
+  neutral:  '#5a5e50',
+  mixed:    '#d4920a'
+}[s] || '#a0a498');
 const clip = (s, n = 220) => (s || '').length > n ? `${s.slice(0, n)}...` : (s || '');
 const dateOnly = (v) => (v || '').slice(0, 10);
 
@@ -125,7 +125,7 @@ function renderChart(data) {
       labels: prices.map(p => p.date),
       datasets: [
         { label: `${data.symbol} close`, data: prices.map(p => p.close), borderColor: '#1f7a4f', borderWidth: 2.5, pointRadius: 0, tension: .22, fill: true, backgroundColor: 'rgba(31,122,79,.10)' },
-        { type: 'scatter', label: 'mentions', data: mentionPoints, parsing: false, pointRadius: 6, pointHoverRadius: 9, pointBackgroundColor: ctx => sentimentColor(ctx.raw?.mention?.sentiment), pointBorderColor: '#182019', pointBorderWidth: 1.5 }
+        { type: 'scatter', label: 'mentions', data: mentionPoints, parsing: false, pointRadius: 8, pointHoverRadius: 14, pointBackgroundColor: ctx => sentimentColor(ctx.raw?.mention?.sentiment), pointBorderColor: '#fff', pointBorderWidth: 2.5 }
       ]
     },
     options: {
