@@ -1,14 +1,16 @@
 # Serenity Signal Dashboard
 
-本项目抓取 `x_curl/` 中的 X GraphQL curl，解析 `@aleabitoreddit` 的帖子、回复、订阅帖，抽取 `$SYMBOL`，写入本地 SQLite，并用 Yahoo chart 接口下载日线价格。
+本项目 Fork 自 [haskaomni/serenity](https://github.com/haskaomni/serenity)，在此之上增加了：
 
-![Serenity dashboard screenshot](docs/assets/serenity-dashboard.png)
+- **OpenAI 情感分析**：对每条 symbol 提及进行 LLM 情感分类（positive / negative / neutral / mixed），结果展示在 dashboard 图表和数据中
 
-## 直接体验
+原项目提供 X 抓取、价格下载和 dashboard 可视化。本项目抓取 `x_curl/` 中的 X GraphQL curl，解析 `@aleabitoreddit` 的帖子、回复、订阅帖，抽取 `$SYMBOL`，写入本地 SQLite，并用 Yahoo chart 接口下载日线价格。
 
-如果你不想自己搭建本地环境，可以订阅 [@iamai_omni](https://x.com/iamai_omni/creator-subscriptions/subscribe)，然后访问 [app.k2ai.dev](https://app.k2ai.dev) 直接使用托管版。也可以扫码直接打开订阅页：
+![Serenity dashboard screenshot](docs/assets/dashboard.png)
 
-<img src="docs/assets/iamai-omni-subscribe-qr.png" alt="Subscribe to @iamai_omni QR code" width="220">
+## 与原项目的区别
+
+本 Fork 在原项目基础上增加了情感分析管线（`scripts/analyze_sentiment.py`）和 dashboard 中的情感可视化。如果你只需要基础的 X 抓取和价格展示，使用原项目即可。
 
 > 本项目仅用于研究和可视化，不构成投资建议。
 
@@ -73,18 +75,20 @@ EOF_CURL
 .venv/bin/python scripts/ingest.py diagnostics --min-mentions 2
 ```
 
-Sentiment analysis:
+情感分析（可选）：
 
 ```bash
-cp .env.example .env
-.venv/bin/python scripts/analyze_sentiment.py direct --limit 20
-.venv/bin/python scripts/analyze_sentiment.py batch-create --limit 1000
+cp .env.example .env   # 填写 OPENAI_API_KEY，DeepSeek 等兼容网关需设 OPENAI_BASE_URL
+.venv/bin/python scripts/analyze_sentiment.py direct --limit 20        # 少量提及，直接模式
+.venv/bin/python scripts/analyze_sentiment.py batch-create --limit 1000 # 大量回填，Batch API
 .venv/bin/python scripts/analyze_sentiment.py batch-import --batch-results data/openai_batches/results.jsonl
 ```
 
-OpenAI sentiment analysis is optional and reads config from `.env` or environment variables. Set `OPENAI_API_KEY`, optionally set `OPENAI_BASE_URL` for an OpenAI-compatible gateway, and optionally set `OPENAI_SENTIMENT_MODEL`. The default model is `gpt-5.4-mini` because it is cost-efficient but stronger than the nano tier for nuanced finance language. Use `OPENAI_SENTIMENT_MODEL=gpt-5.4-nano` or `--model gpt-5.4-nano` for cheaper/high-volume experiments after spot-checking quality. By default, sentiment commands skip mentions that already have `mention_analysis` rows. Use `-f` / `--force` to re-analyze existing rows after changing model, prompt, or schema. For backfills, prefer Batch mode because it is asynchronous and cheaper; for a handful of new mentions, direct mode is simpler.
-
-When the Batch API is unavailable (such as with DeepSeek or other non-OpenAI providers), `batch-create` falls back to `direct` mode automatically and writes results to the database immediately. In that case, skip `batch-import` — the data is already stored.
+配置说明：
+- 默认模型 `gpt-5.4-mini`，通过 `.env` 的 `OPENAI_SENTIMENT_MODEL` 或 `--model` 覆盖
+- `-f` / `--force` 重新分析已有情感的提及（切换模型、调整 prompt 后使用）
+- `batch-create` 在 Batch API 不可用时自动回退到 direct 模式并直接写入数据库
+- `direct` 模式每批最多 50 条提及一起发送，比逐条调用快得多
 
 注意：`x_curl/*.curl` 内的登录态可能过期；若抓取返回空或报错，重新从浏览器复制 curl 后再运行。
 
@@ -94,13 +98,17 @@ Media handling stores image metadata and `pbs.twimg.com` URLs from X responses. 
 
 # Serenity Signal Dashboard (English)
 
-This project reads X GraphQL curl commands from `x_curl/`, parses posts, replies, and premium posts from `@aleabitoreddit`, extracts `$SYMBOL` mentions, stores them in a local SQLite database, and downloads daily price bars from Yahoo's chart API.
+This project is a fork of [haskaomni/serenity](https://github.com/haskaomni/serenity) with additional features:
 
-![Serenity dashboard screenshot](docs/assets/serenity-dashboard.png)
+- **OpenAI sentiment analysis** — LLM-based sentiment classification (positive / negative / neutral / mixed) for each symbol mention, visualized in the dashboard
 
-## Try It Directly
+The original project provides X fetching, price downloads, and dashboard visualization. This fork reads X GraphQL curl commands from `x_curl/`, parses posts, replies, and premium posts from `@aleabitoreddit`, extracts `$SYMBOL` mentions, stores them in a local SQLite database, and downloads daily price bars from Yahoo's chart API.
 
-If you do not want to set up the local project yourself, subscribe to [@iamai_omni](https://x.com/iamai_omni/creator-subscriptions/subscribe), then visit [app.k2ai.dev](https://app.k2ai.dev) to use the hosted version directly. You can also scan this QR code to open the subscription page:
+![Serenity dashboard screenshot](docs/assets/dashboard.png)
+
+## Hosted Version
+
+The original project offers a hosted version. Subscribe to [@iamai_omni](https://x.com/iamai_omni/creator-subscriptions/subscribe), then visit [app.k2ai.dev](https://app.k2ai.dev) to use it directly. You can also scan this QR code to open the subscription page:
 
 <img src="docs/assets/iamai-omni-subscribe-qr.png" alt="Subscribe to @iamai_omni QR code" width="220">
 
@@ -167,17 +175,19 @@ Warning: `x_curl/*.curl` contains login cookies/tokens and is ignored by `.gitig
 .venv/bin/python scripts/ingest.py diagnostics --min-mentions 2
 ```
 
-Sentiment analysis:
+Sentiment analysis (optional):
 
 ```bash
-cp .env.example .env
-.venv/bin/python scripts/analyze_sentiment.py direct --limit 20
-.venv/bin/python scripts/analyze_sentiment.py batch-create --limit 1000
+cp .env.example .env   # set OPENAI_API_KEY; also set OPENAI_BASE_URL for DeepSeek etc.
+.venv/bin/python scripts/analyze_sentiment.py direct --limit 20        # few mentions, direct mode
+.venv/bin/python scripts/analyze_sentiment.py batch-create --limit 1000 # bulk backfill, Batch API
 .venv/bin/python scripts/analyze_sentiment.py batch-import --batch-results data/openai_batches/results.jsonl
 ```
 
-OpenAI sentiment analysis is optional and reads config from `.env` or environment variables. Set `OPENAI_API_KEY`, optionally set `OPENAI_BASE_URL` for an OpenAI-compatible gateway, and optionally set `OPENAI_SENTIMENT_MODEL`. The default model is `gpt-5.4-mini` because it is cost-efficient but stronger than the nano tier for nuanced finance language. Use `OPENAI_SENTIMENT_MODEL=gpt-5.4-nano` or `--model gpt-5.4-nano` for cheaper/high-volume experiments after spot-checking quality. By default, sentiment commands skip mentions that already have `mention_analysis` rows. Use `-f` / `--force` to re-analyze existing rows after changing model, prompt, or schema. For backfills, prefer Batch mode because it is asynchronous and cheaper; for a handful of new mentions, direct mode is simpler.
-
-When the Batch API is unavailable (such as with DeepSeek or other non-OpenAI providers), `batch-create` falls back to `direct` mode automatically and writes results to the database immediately. In that case, skip `batch-import` — the data is already stored.
+Configuration:
+- Default model `gpt-5.4-mini`; override via `.env` `OPENAI_SENTIMENT_MODEL` or `--model`
+- `-f` / `--force` re-analyzes mentions that already have sentiment rows
+- `batch-create` auto-falls back to direct mode when Batch API is unavailable, writing results immediately
+- `direct` sends up to 50 mentions per API call for speed
 
 If X fetching returns empty or invalid responses, copy fresh curl commands from Chrome and run the ingestion again.
